@@ -3,5 +3,8 @@ dist
 .git
 .vscode
 .env
+.env.*
 *.log
 database backup
+public/uploads
+coverage

@@ -17,6 +17,17 @@ COPY tsconfig.json ./
 
 RUN npm run prisma:generate
 RUN npm run build
+
+# This target intentionally retains the Prisma CLI. Run it explicitly before
+# deploying whenever the Prisma schema changes.
+FROM builder AS migrator
+
+COPY scripts ./scripts
+
+CMD ["npm", "run", "prisma:migrate"]
+
+FROM builder AS production-dependencies
+
 RUN npm prune --omit=dev
 
 FROM node:20-bookworm-slim AS runner
@@ -32,7 +43,7 @@ ENV PORT=5000
 ENV IP=0.0.0.0
 ENV TS_NODE_BASEURL=./dist
 
-COPY --chown=node:node --from=builder /app/node_modules ./node_modules
+COPY --chown=node:node --from=production-dependencies /app/node_modules ./node_modules
 COPY --chown=node:node --from=builder /app/dist ./dist
 COPY --chown=node:node --from=builder /app/public ./public
 COPY --chown=node:node --from=builder /app/tsconfig.json ./tsconfig.json

@@ -1,0 +1,33 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: dockerfile
+      target: runner
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      IP: 0.0.0.0
+      PORT: 5000
+    ports:
+      - "${HOST_PORT:-5000}:5000"
+    volumes:
+      - uploads:/app/public/uploads
+    restart: unless-stopped
+
+  # Run manually with: docker compose run --rm migrate
+  # It is deliberately not a dependency of api; schema changes should be
+  # applied as an explicit deployment step.
+  migrate:
+    build:
+      context: .
+      dockerfile: dockerfile
+      target: migrator
+    env_file:
+      - .env
+    profiles:
+      - tools
+
+volumes:
+  uploads:
