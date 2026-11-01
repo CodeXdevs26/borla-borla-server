@@ -1,0 +1,33 @@
+{
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": 13,
+    "sourceType": "module",
+  },
+  "plugins": ["@typescript-eslint"],
+  // HERE
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "prettier",
+  ],
+
+  "rules": {
+    "@typescript-eslint/no-unused-vars": "error",
+    "no-console": "error",
+    // "@typescript-eslint/no-explicit-any"
+    "no-undefined": "error",
+    "no-unused-expressions": "error",
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/consistent-type-definitions": "off",
+  },
+
+  "env": {
+    "browser": true,
+    "es2021": true,
+    "node": true,
+  },
+  "globals": {
+    "process": "readonly",
+  },
+}

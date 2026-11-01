@@ -1,0 +1,589 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../src/generated/prisma"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+//contents
+model SafetyToolkitSection {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  title     String
+  items     String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt, id])
+  @@map("safety_toolkit_sections")
+}
+
+model SanitationChecklist {
+  id          String                        @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String
+  icon        String
+  createdAt   DateTime                      @default(now())
+  updatedAt   DateTime                      @updatedAt
+  progress    SanitationChecklistProgress[]
+
+  @@index([createdAt, id])
+  @@map("sanitation_checklists")
+}
+
+model SanitationChecklistProgress {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String    @db.ObjectId
+  checklistId String    @db.ObjectId
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+  photos      String[]  @default([])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  checklist SanitationChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, checklistId])
+  @@map("sanitation_checklist_progress")
+}
+
+model Contents {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  aboutUs           String?
+  termsAndCondition String
+  privacyPolicy     String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("contents")
+}
+
+//user schema
+model User {
+  id               String       @id @default(auto()) @map("_id") @db.ObjectId
+  name             String
+  email            String? // Unique supplied values enforced by partial MongoDB index
+  password         String?
+  status           status       @default(active)
+  onlineStatus     onlineStatus @default(offline)
+  role             Role         @default(user)
+  accountType      AccountType?
+  profilePicture   String?
+  profilePictureS3 String?
+  phoneNumber      String? // Unique supplied values enforced by partial MongoDB index
+  dateOfBirth      DateTime?
+  ghanaCardId      String[]     @default([])
+  ghanaCardIdS3    String[]     @default([])
+  tricycleLicense  String[]     @default([])
+  sanitationPermit String[]     @default([])
+  wasteCapacity    Float? // Maximum waste weight in kg; legacy riders must set this before accepting
+  customerId       String?
+  referredById     String?      @db.ObjectId
+  riderVerified    Boolean      @default(false) // Admin approval for riders
+  zoneId           String?      @db.ObjectId // Assigned zone for riders
+  expireAt         DateTime?    @default(now())
+  isDeleted        Boolean      @default(false)
+
+  location     Json? // 👈 GeoJSON Point
+  locationName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  verification                Verification?
+  deviceHistory               DeviceHistory[]
+  documents                   Documents[]
+  Participants                Participants[]
+  savedPlaces                 SavedPlace[]
+  notifications               Notification[]
+  bookingsAsUser              Booking[]                     @relation("UserBookings")
+  bookingsAsRider             Booking[]                     @relation("RiderBookings")
+  wallet                      Wallet?
+  zone                        Zone?                         @relation(fields: [zoneId], references: [id])
+  transactions                Transaction[]
+  referredBy                  User?                         @relation("UserReferrals", fields: [referredById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  referrals                   User[]                        @relation("UserReferrals")
+  referralProfile             ReferralProfile?
+  emergencySupportReports     EmergencySupport[]            @relation("EmergencyReporter")
+  emergencySupportResolutions EmergencySupport[]            @relation("EmergencyResolver")
+  feedbackGiven               Feedback[]                    @relation("FeedbackGiver")
+  sanitationChecklistProgress SanitationChecklistProgress[]
+  feedbackReceived            Feedback[]                    @relation("FeedbackReceiver")
+}
+
+model Feedback {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  giverId    String   @db.ObjectId
+  receiverId String   @db.ObjectId
+  rating     Int
+  text       String
+  photo      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  giver    User @relation("FeedbackGiver", fields: [giverId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  receiver User @relation("FeedbackReceiver", fields: [receiverId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([receiverId, createdAt, id])
+  @@map("feedbacks")
+}
+
+model ReferralProfile {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  code      String   @unique
+  userId    String   @unique @db.ObjectId
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("referral_profiles")
+}
+
+model EmergencySupport {
+  id                 String                 @id @default(auto()) @map("_id") @db.ObjectId
+  userId             String                 @db.ObjectId
+  location           Json
+  locationAddress    String?
+  images             String[]               @default([])
+  contactName        String
+  contactPhoneNumber String
+  contactEmail       String?
+  description        String
+  status             EmergencySupportStatus @default(pending)
+  resolvedAt         DateTime?
+  resolvedById       String?                @db.ObjectId
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  user       User  @relation("EmergencyReporter", fields: [userId], references: [id])
+  resolvedBy User? @relation("EmergencyResolver", fields: [resolvedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([userId])
+  @@index([status, createdAt])
+  @@map("emergency_support")
+}
+
+enum EmergencySupportStatus {
+  pending
+  resolved
+}
+
+model Notification {
+  id      String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId  String  @db.ObjectId
+  type    String
+  title   String
+  message String
+  data    Json?
+  isRead  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+model DeviceHistory {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  ip        String?
+  browser   String?
+  os        String?
+  device    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Verification {
+  userId    String    @map("_id") @db.ObjectId
+  otp       Int
+  expiredAt DateTime?
+  status    Boolean   @default(false)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@id([userId])
+}
+
+model Documents {
+  id       String         @id @default(auto()) @map("_id") @db.ObjectId
+  userId   String         @db.ObjectId
+  document String
+  status   documentStatus @default(pending)
+  type     documentType   @default(idCard)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Zone {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  boundary  Json // GeoJSON Polygon for zone boundary
+  isDeleted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stations Station[]
+  riders   User[]
+  zipCodes ZipCode[]
+
+  @@map("zones")
+}
+
+model Station {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  zoneId    String  @db.ObjectId
+  name      String
+  address   String
+  location  Json // GeoJSON Point for station location
+  isDeleted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  zone     Zone      @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@map("stations")
+}
+
+model ZipCode {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  zoneId    String  @db.ObjectId
+  zipCode   String
+  areaName  String
+  isDeleted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  zone Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@unique([zoneId, zipCode])
+  @@map("zip_codes")
+}
+
+model SavedPlace {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String    @db.ObjectId
+  placeType  placeType @default(home)
+  placeTitle String
+  placeName  String
+  address    String
+  location   Json // GeoJSON Point
+  isDeleted  Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("saved_places")
+}
+
+/**
+ * ========================
+ * Chatting models
+ * ========================
+ */
+model Chat {
+  id     String     @id @default(auto()) @map("_id") @db.ObjectId
+  status chatStatus @default(active)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants Participants[]
+}
+
+model Participants {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  chatId    String   @db.ObjectId
+  userId    String   @db.ObjectId
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chat Chat @relation(fields: [chatId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Messages {
+  id         String  @id @default(auto()) @map("_id") @db.ObjectId
+  senderId   String  @db.ObjectId
+  receiverId String  @db.ObjectId
+  chatId     String  @db.ObjectId
+  text       String?
+  seen       Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  images Images[]
+}
+
+model Images {
+  id          String @id @default(auto()) @map("_id") @db.ObjectId
+  image       String
+  referenceId String @db.ObjectId
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages Messages? @relation(fields: [referenceId], references: [id])
+}
+
+model Wallet {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @unique @db.ObjectId
+  balance   Float    @default(0.0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("wallets")
+}
+
+model Transaction {
+  id       String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId   String  @db.ObjectId
+  user     User    @relation(fields: [userId], references: [id])
+  riderId  String? @db.ObjectId // Optional, only for ride payments
+  walletId String? @db.ObjectId // Track which wallet this transaction affected
+
+  bookingId           String?         @db.ObjectId // Optional, only for ride payments
+  booking             Booking?        @relation(fields: [bookingId], references: [id])
+  amount              Float
+  commission          Float? // Optional, for ride payments
+  comissionPercentage Float? // Optional, for ride payments
+  riderEarnings       Float? // Optional, for ride payments
+  type                TransactionType
+  status              String          @default("pending") // pending, success, failed
+  clientReference     String          @unique
+  hubtelId            String?
+  salesInvoiceId      String?
+  checkoutId          String?
+  description         String?
+  reference           String          @unique // Paystack Reference
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@map("transactions")
+}
+
+model CommissionRate {
+  id        String   @id @default("global") @map("_id")
+  rate      Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("commission_rates")
+}
+
+enum TransactionType {
+  TOPUP
+  WITHDRAWAL
+  COMMISSION
+  RIDE_PAYMENT
+  BONUS
+}
+
+enum documentType {
+  tricycleLicense
+  sanitationPermit
+  idCard
+  passport
+  nid
+}
+
+enum documentStatus {
+  pending
+  verified
+  rejected
+}
+
+enum status {
+  active
+  blocked
+}
+
+enum onlineStatus {
+  online
+  offline
+}
+
+enum Role {
+  admin
+  sub_admin
+  supper_admin
+  user
+  institute
+  rider
+}
+
+enum AccountType {
+  support_team
+  sales_lead
+}
+
+enum chatStatus {
+  active
+  blocked
+}
+
+enum placeType {
+  home
+  office
+  shop
+  hotel
+}
+
+type BookingNeighbour {
+  name   String
+  amount Float
+}
+
+// Booking model for waste collection requests
+model Booking {
+  id                 String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId             String        @db.ObjectId
+  riderId            String?       @db.ObjectId
+  status             bookingStatus @default(pending)
+  cancellationReason String?
+
+  // Waste details
+  wasteCategory wasteCategory
+  wasteImages   String[]      @default([])
+  binSize       String // e.g., "Large (240 L)"
+  binQuantity   Int           @default(1)
+  wasteSize     Float // in kg
+
+  // Location details
+  pickupLocation  Json // GeoJSON Point
+  pickupAddress   String
+  dropoffLocation Json? // GeoJSON Point (optional for now)
+  dropoffAddress  String?
+
+  // Ride details
+  vehicleType       String? // e.g., "Tri Cycle"
+  estimatedDistance Float? // in km
+  estimatedTime     String? // e.g., "30-45 m"
+
+  // Payment details
+  paymentMethod      paymentMethod
+  price              Float?
+  neighbours         BookingNeighbour[]
+  isPaid             Boolean            @default(false)
+  paidAt             DateTime?
+  isPaidByCustomer   Boolean            @default(false) // Track if customer has paid (for cash payments)
+  isPaidByCustomerAt DateTime? // When customer paid (for cash payments)
+  isRefunded         Boolean            @default(false)
+  refundedAt         DateTime?
+
+  // Ride tracking
+  arrivedAtPickup  DateTime?
+  garbageReadyAt   DateTime?
+  garbageCollectedAt DateTime?
+  arrivedAtDropoff DateTime?
+
+  // Scheduling
+  isScheduled   Boolean   @default(false)
+  scheduledFor  DateTime? // The date and time when the ride should start
+  scheduledDate String? // For display purposes: "today", "tomorrow", or specific date
+
+  // Rider search lifecycle. Each search cycle lasts two hours and each matching
+  // rider is notified at most once during that cycle.
+  riderSearchStatus              String    @default("active") // active, expired, accepted, cancelled
+  riderSearchCycle               Int       @default(1)
+  riderSearchStartedAt           DateTime?
+  riderSearchExpiresAt           DateTime?
+  nextRiderSearchAt              DateTime?
+  lastRiderSearchAt              DateTime?
+  notifiedRiderIds               String[]  @default([]) @db.ObjectId
+  creatorSearchExpiredNotifiedAt DateTime?
+  riderSearchLockUntil           DateTime?
+
+  // Timestamps
+  requestedAt        DateTime  @default(now())
+  acceptedAt         DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  paymentCollectedAt DateTime?
+  headingToStationAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User          @relation("UserBookings", fields: [userId], references: [id])
+  rider        User?         @relation("RiderBookings", fields: [riderId], references: [id])
+  rating       Rating?
+  station      Station?      @relation(fields: [stationId], references: [id])
+  stationId    String?       @db.ObjectId
+  transactions Transaction[]
+
+  @@index([riderSearchStatus, nextRiderSearchAt])
+  @@index([riderId, status, acceptedAt, id])
+  @@map("bookings")
+}
+
+// Rating model for booking feedback
+model Rating {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  bookingId String  @unique @db.ObjectId
+  rating    Int // 1-5 stars
+  feedback  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("ratings")
+}
+
+enum bookingStatus {
+  garbage_ready // Customer confirmed garbage is ready to hand over
+  garbage_collected // Assigned rider confirmed collection; customer may pay
+  pending // Waiting for rider to accept
+  accepted // Rider accepted
+  arrived_pickup // Rider arrived at pickup location
+  payment_collected // Rider collected payment at pickup
+  heading_to_station // Rider is heading to station location
+  in_progress // Rider is collecting/transporting
+  arrived_dropoff // Rider arrived at dropoff location
+  awaiting_payment // Waiting for customer to pay
+  completed // Job completed and paid
+  cancelled // Cancelled by user or rider
+}
+
+enum wasteCategory {
+  organic
+  metal
+  plastic
+  general
+  paper
+}
+
+enum paymentMethod {
+  hubtel
+  cash
+}
