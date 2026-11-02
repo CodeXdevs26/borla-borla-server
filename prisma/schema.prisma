@@ -89,6 +89,7 @@ model User {
   wasteCapacity    Float? // Maximum waste weight in kg; legacy riders must set this before accepting
   customerId       String?
   referredById     String?      @db.ObjectId
+  rewardPoints     Int          @default(0)
   riderVerified    Boolean      @default(false) // Admin approval for riders
   zoneId           String?      @db.ObjectId // Assigned zone for riders
   expireAt         DateTime?    @default(now())
@@ -114,6 +115,9 @@ model User {
   referredBy                  User?                         @relation("UserReferrals", fields: [referredById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   referrals                   User[]                        @relation("UserReferrals")
   referralProfile             ReferralProfile?
+  rewardPointLedger           RewardPointLedger[]
+  rewardClaims                RewardClaim[]                  @relation("RewardClaimUser")
+  reviewedRewardClaims        RewardClaim[]                  @relation("RewardClaimReviewer")
   emergencySupportReports     EmergencySupport[]            @relation("EmergencyReporter")
   emergencySupportResolutions EmergencySupport[]            @relation("EmergencyResolver")
   feedbackGiven               Feedback[]                    @relation("FeedbackGiver")
@@ -148,6 +152,64 @@ model ReferralProfile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("referral_profiles")
+}
+
+model RewardPointLedger {
+  id        String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String            @db.ObjectId
+  action    RewardPointAction
+  points    Int
+  eventKey  String            @unique
+  bookingId String?           @db.ObjectId
+  metadata  Json?
+  createdAt DateTime          @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([bookingId])
+  @@map("reward_point_ledger")
+}
+
+model RewardCatalogueItem {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  description     String?
+  esgDimension    String?
+  eligibleRoles   String[]      @default([])
+  pointsCost      Int
+  stockQuantity   Int           @default(0)
+  claimedQuantity Int           @default(0)
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  claims          RewardClaim[]
+
+  @@index([isActive, createdAt])
+  @@map("reward_catalogue_items")
+}
+
+model RewardClaim {
+  id          String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String            @db.ObjectId
+  itemId      String            @db.ObjectId
+  pointsCost  Int
+  status      RewardClaimStatus @default(pending)
+  reviewedById String?          @db.ObjectId
+  reviewNote  String?
+  requestedAt DateTime          @default(now())
+  reviewedAt  DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  user       User                 @relation("RewardClaimUser", fields: [userId], references: [id], onDelete: Cascade)
+  item       RewardCatalogueItem  @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  reviewedBy User?                @relation("RewardClaimReviewer", fields: [reviewedById], references: [id], onDelete: NoAction)
+
+  @@index([userId, status, requestedAt])
+  @@index([itemId, status, requestedAt])
+  @@index([status, requestedAt])
+  @@map("reward_claims")
 }
 
 model EmergencySupport {
@@ -438,6 +500,22 @@ enum Role {
   user
   institute
   rider
+}
+
+enum RewardPointAction {
+  first_successful_pickup
+  ten_successful_pickups
+  qualified_customer_referral
+  qualified_rider_referral
+  high_service_quality
+  verified_cleanup_campaign
+  verified_segregation_recycling
+}
+
+enum RewardClaimStatus {
+  pending
+  approved
+  rejected
 }
 
 enum AccountType {

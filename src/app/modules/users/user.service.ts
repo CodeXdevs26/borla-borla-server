@@ -168,6 +168,7 @@ const getById = async (
       profilePicture: true,
       profilePictureS3: true,
       phoneNumber: true,
+      rewardPoints: true,
       createdAt: true,
       verification: {
         select: {

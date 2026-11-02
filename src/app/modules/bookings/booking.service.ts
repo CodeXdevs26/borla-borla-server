@@ -23,6 +23,7 @@ import {
 import { commissionServices } from '../commissions/commission.service';
 import { emitToUser } from '../../utils/socket';
 import { notificationService } from '../notifications/notification.service';
+import { rewardPointServices } from '../rewards/rewardPoints.service';
 import { log } from 'node:console';
 
 const RIDER_SEARCH_INTERVAL_MS = 15 * 60 * 1000;
@@ -1923,21 +1924,30 @@ const markCompleted = async (bookingId: string, riderId: string) => {
     );
   }
 
-  const updatedBooking = await prisma.booking.update({
-    where: { id: bookingId },
-    data: {
-      status: 'completed',
-      completedAt: new Date(),
-    },
-    include: {
-      station: {
-        select: {
-          id: true,
-          name: true,
-          address: true,
+  const updatedBooking = await prisma.$transaction(async tx => {
+    const completedBooking = await tx.booking.update({
+      where: { id: bookingId },
+      data: {
+        status: 'completed',
+        completedAt: new Date(),
+      },
+      include: {
+        station: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+          },
         },
       },
-    },
+    });
+
+    await rewardPointServices.applyBookingCompletionPointRewards(
+      tx,
+      completedBooking,
+    );
+
+    return completedBooking;
   });
 
   await notificationService.createNotificationForUsers(

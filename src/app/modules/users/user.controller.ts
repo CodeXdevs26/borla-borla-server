@@ -166,7 +166,7 @@ const updateMyProfile = catchAsync(async (req: Request, res: Response) => {
     const profileFile = files.profilePicture[0];
     const fileBuffer = fs.readFileSync(profileFile.path); // Read the saved file
     // Delete old profile picture if exists
-    
+
     try {
       if (user?.profilePicture && fs.existsSync(user.profilePicture)) {
         fs.unlinkSync(user.profilePicture);

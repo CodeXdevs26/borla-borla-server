@@ -28,12 +28,14 @@ import { Router } from 'express';
 import { feedbackRoutes } from '../modules/feedback/feedback.route';
 import { safetyToolkitRoutes } from '../modules/safetyToolkit/safetyToolkit.route';
 import { sanitationChecklistRoutes } from '../modules/sanitationChecklist/sanitationChecklist.route';
+import { rewardCatalogueRoutes } from '../modules/rewards/rewardCatalogue.route';
 
 const router = Router();
 const moduleRoutes = [
   { path: '/sanitation-checklist', route: sanitationChecklistRoutes },
   { path: '/safety-toolkit', route: safetyToolkitRoutes },
   { path: '/feedbacks', route: feedbackRoutes },
+  { path: '/rewards', route: rewardCatalogueRoutes },
   {
     path: '/users',
     route: userRoutes,
