@@ -31,6 +31,12 @@ export const acceptedBookingsQuerySchema = z
     'Pagination offset is too large',
   );
 
+const estimatePriceZodSchema = z.object({
+  body: z.object({
+    weight: z.coerce.number().finite().positive('Weight must be greater than 0'),
+  }),
+});
+
 const createBookingZodSchema = z.object({
   body: z.object({
     wasteCategory: z.enum(['organic', 'metal', 'plastic', 'general', 'paper']),
@@ -289,6 +295,7 @@ const processPaymentZodSchema = z.object({
 });
 
 export const bookingValidations = {
+  estimatePriceZodSchema,
   handoverZodSchema: z.object({
     params: z.object({
       id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid booking ID'),

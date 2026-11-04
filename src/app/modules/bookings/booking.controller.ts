@@ -149,6 +149,16 @@ const getBookingById = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getEstimatedBookingPrice = catchAsync(async (req: Request, res: Response) => {
+  const result = bookingServices.getEstimatedBookingPrice(req.body.weight);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Estimated booking price calculated successfully',
+    data: result,
+  });
+});
+
 // Accept booking (Rider)
 const acceptBooking = catchAsync(async (req: Request, res: Response) => {
   const result = await bookingServices.acceptBooking(
@@ -174,6 +184,19 @@ const retryRiderSearch = catchAsync(async (req: Request, res: Response) => {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Rider search restarted for another two hours',
+    data: result,
+  });
+});
+
+const stopRiderSearch = catchAsync(async (req: Request, res: Response) => {
+  const result = await bookingServices.stopRiderSearch(
+    req.params.id as string,
+    req.user.userId,
+  );
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Rider search stopped successfully',
     data: result,
   });
 });
@@ -389,6 +412,7 @@ export const bookingControllers = {
   getMyBookings,
   getRiderBookings,
   getBookingById,
+  getEstimatedBookingPrice,
   acceptBooking,
   declineBooking,
   updateBookingStatus,
@@ -397,6 +421,7 @@ export const bookingControllers = {
   markArrivedAtDropoff,
   requestPayment,
   retryRiderSearch,
+  stopRiderSearch,
   markPaymentCollectedAtPickup,
   markHeadingToStation,
   markCompleted,

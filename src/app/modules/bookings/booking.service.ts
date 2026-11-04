@@ -18,7 +18,8 @@ import {
 } from './booking.utils';
 import {
   calculateDistance,
-  calculateEstimatedPrice,
+  calculateBookingEstimatedPrice,
+  calculateBookingFinalPrice,
 } from './../riders/rider.utils';
 import { commissionServices } from '../commissions/commission.service';
 import { emitToUser } from '../../utils/socket';
@@ -275,6 +276,33 @@ const processRiderSearch = async (bookingId: string) => {
       });
     }
 
+    // The first search runs immediately when a booking is created. Every
+    // subsequent persisted 15-minute search reports that the booking still
+    // has no accepting rider, while keeping the final two-hour expiry event
+    // separate.
+    if (booking.lastRiderSearchAt) {
+      const searchStartedAt = booking.riderSearchStartedAt || now;
+      const searchAttempt = Math.max(
+        2,
+        Math.floor(
+          (now.getTime() - searchStartedAt.getTime()) /
+            RIDER_SEARCH_INTERVAL_MS,
+        ) + 1,
+      );
+      const nextSearchAt = new Date(now.getTime() + RIDER_SEARCH_INTERVAL_MS);
+
+      emitToUser(booking.userId, 'booking:rider-search-no-match', {
+        bookingId: booking.id,
+        searchCycle: booking.riderSearchCycle,
+        searchAttempt,
+        notifiedRiderCount: newRiderIds.length,
+        nextSearchAt: nextSearchAt.toISOString(),
+        searchExpiresAt: expiresAt.toISOString(),
+        message:
+          'No rider has accepted your booking yet. We will continue searching.',
+      });
+    }
+
     return { notifiedRiderCount: newRiderIds.length };
   } catch (error) {
     await prisma.booking
@@ -368,6 +396,7 @@ const createBooking = async (userId: string, payload: ICreateBooking) => {
     }
   }
 
+  const estimatedPrice = calculateBookingEstimatedPrice(payload.wasteSize);
   const booking = await prisma.booking.create({
     data: {
       userId,
@@ -384,7 +413,9 @@ const createBooking = async (userId: string, payload: ICreateBooking) => {
       estimatedDistance: payload.estimatedDistance,
       estimatedTime: payload.estimatedTime,
       paymentMethod: payload.paymentMethod,
-      price: payload.price,
+      // The customer sees this before rider assignment. It is replaced by the
+      // main price when a rider accepts and the chargeable distance is known.
+      price: estimatedPrice,
       neighbours: payload.neighbours || [],
       status: 'pending',
       // Scheduling fields
@@ -428,6 +459,14 @@ const createBooking = async (userId: string, payload: ICreateBooking) => {
   });
 };
 
+const getEstimatedBookingPrice = (weight: number) => ({
+  weight,
+  baseFee: 20,
+  weightRatePerKg: 1.5,
+  estimatedPrice: calculateBookingEstimatedPrice(weight),
+  currency: 'GHS',
+});
+
 const deleteBooking = async (bookingId: string, userId: string) => {
   const booking = await prisma.booking.delete({
     where: { id: bookingId, userId: userId },
@@ -461,6 +500,7 @@ const getAvailableBookingsForRider = async (
       riderVerified: true,
       zoneId: true,
       isDeleted: true,
+      location: true,
       zone: {
         select: {
           id: true,
@@ -627,6 +667,25 @@ const getAvailableBookingsForRider = async (
       : 0;
 
   // Transform the results to match the expected format
+  const getRiderMainPrice = (booking: any) => {
+    let chargeableDistance = 0;
+    const riderCoordinates = (rider.location as any)?.coordinates;
+    const pickupCoordinates = booking.pickupLocation?.coordinates;
+    if (Array.isArray(riderCoordinates) && Array.isArray(pickupCoordinates)) {
+      const [riderLongitude, riderLatitude] = riderCoordinates.map(Number);
+      const [pickupLongitude, pickupLatitude] = pickupCoordinates.map(Number);
+      if ([riderLongitude, riderLatitude, pickupLongitude, pickupLatitude].every(Number.isFinite)) {
+        chargeableDistance = calculateDistance(
+          riderLatitude,
+          riderLongitude,
+          pickupLatitude,
+          pickupLongitude,
+        );
+      }
+    }
+    return calculateBookingFinalPrice(Number(booking.wasteSize), chargeableDistance);
+  };
+
   const bookings = Array.isArray(bookingsInZone)
     ? bookingsInZone.map((booking: any) => ({
         id: booking._id.$oid,
@@ -645,7 +704,8 @@ const getAvailableBookingsForRider = async (
         estimatedDistance: booking.estimatedDistance,
         estimatedTime: booking.estimatedTime,
         paymentMethod: booking.paymentMethod,
-        price: booking.price,
+        // Riders see the main price calculated for their current location.
+        price: getRiderMainPrice(booking),
         neighbours: booking.neighbours || [],
         status: booking.status,
         createdAt: booking.createdAt,
@@ -1215,7 +1275,7 @@ const acceptBooking = async (bookingId: string, riderId: string) => {
   // Calculate distance and time
   let estimatedDistance: number | null = null;
   let estimatedTime: string | null = null;
-  let calculatedPrice: number | null = null;
+  let chargeableDistance = 0;
 
   if (rider.location && booking.pickupLocation) {
     try {
@@ -1245,12 +1305,9 @@ const acceptBooking = async (bookingId: string, riderId: string) => {
         );
         const estimatedMinutes = estimateTimeInMinutes(estimatedDistance);
         estimatedTime = formatEstimatedTime(estimatedMinutes);
-        calculatedPrice = calculateEstimatedPrice(
-          estimatedDistance,
-          estimatedMinutes,
-        );
+        chargeableDistance = estimatedDistance;
         console.log(
-          `Calculated distance: ${estimatedDistance} km, estimated time: ${estimatedTime}, estimated price: GHS ${calculatedPrice}`,
+          `Calculated chargeable distance: ${estimatedDistance} km, estimated time: ${estimatedTime}`,
         );
       }
     } catch (error) {
@@ -1258,6 +1315,11 @@ const acceptBooking = async (bookingId: string, riderId: string) => {
       // Continue without distance/time if calculation fails
     }
   }
+
+  const calculatedPrice = calculateBookingFinalPrice(
+    booking.wasteSize,
+    chargeableDistance,
+  );
 
   // Update booking
   const updatedBooking = await prisma.booking
@@ -1283,7 +1345,7 @@ const acceptBooking = async (bookingId: string, riderId: string) => {
         acceptedAt: new Date(),
         estimatedDistance,
         estimatedTime,
-        price: calculatedPrice ?? booking.price,
+        price: calculatedPrice,
         riderSearchStatus: 'accepted',
         nextRiderSearchAt: null,
         riderSearchLockUntil: null,
@@ -1417,6 +1479,46 @@ const retryRiderSearch = async (bookingId: string, userId: string) => {
 
   await processRiderSearch(booking.id);
   return prisma.booking.findUnique({ where: { id: booking.id } });
+};
+
+// Stop the current two-hour search without cancelling the customer's booking.
+// All scheduler and rider-accept queries require riderSearchStatus "active".
+const stopRiderSearch = async (bookingId: string, userId: string) => {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    select: { id: true, userId: true, riderId: true, status: true, riderSearchStatus: true },
+  });
+
+  if (!booking || booking.userId !== userId) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Booking not found');
+  }
+  if (booking.status !== 'pending' || booking.riderId) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Only an unaccepted pending booking search can be stopped');
+  }
+  if (booking.riderSearchStatus !== 'active') {
+    throw new AppError(httpStatus.CONFLICT, 'Rider search is not currently active');
+  }
+
+  const stopped = await prisma.booking.updateMany({
+    where: {
+      id: bookingId,
+      userId,
+      status: 'pending',
+      riderId: null,
+      riderSearchStatus: 'active',
+    },
+    data: {
+      riderSearchStatus: 'stopped',
+      nextRiderSearchAt: null,
+      riderSearchLockUntil: null,
+    },
+  });
+
+  if (stopped.count !== 1) {
+    throw new AppError(httpStatus.CONFLICT, 'Rider search changed before it could be stopped');
+  }
+
+  return prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
 };
 
 // Update booking status
@@ -2159,6 +2261,7 @@ export const bookingServices = {
   getHistoryPage,
   getAcceptedBookings,
   createBooking,
+  getEstimatedBookingPrice,
   deleteBooking,
   getAvailableBookingsForRider,
   getMyBookings,
@@ -2175,5 +2278,6 @@ export const bookingServices = {
   markArrivedAtDropoff,
   requestPayment,
   retryRiderSearch,
+  stopRiderSearch,
   processDueRiderSearches,
 };

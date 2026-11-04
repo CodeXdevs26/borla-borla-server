@@ -64,3 +64,27 @@ export const calculateEstimatedPrice = (
 
   return parseFloat((baseFare + distanceCost + timeCost).toFixed(2));
 };
+
+// Booking collection prices. Keep these separate from the rider-discovery
+// travel estimate above: customers are charged by waste weight and the
+// chargeable transfer distance, not by the rider's minute estimate.
+export const BOOKING_PRICING_CONFIG = {
+  baseFee: 20,
+  weightRatePerKg: 1.5,
+  distanceRatePerKm: 0.5,
+};
+
+export const calculateBookingEstimatedPrice = (weightKg: number): number => {
+  const { baseFee, weightRatePerKg } = BOOKING_PRICING_CONFIG;
+  return Number((baseFee + weightKg * weightRatePerKg).toFixed(2));
+};
+
+export const calculateBookingFinalPrice = (
+  weightKg: number,
+  chargeableDistanceKm: number,
+): number => {
+  const { baseFee, weightRatePerKg, distanceRatePerKm } = BOOKING_PRICING_CONFIG;
+  return Number(
+    (baseFee + weightKg * weightRatePerKg + chargeableDistanceKm * distanceRatePerKm).toFixed(2),
+  );
+};

@@ -14,7 +14,7 @@ export interface ICreateBooking {
   estimatedDistance?: number;
   estimatedTime?: string;
   paymentMethod: 'hubtel' | 'cash';
-  price: number;
+  price?: number;
   neighbours?: Array<{
     name: string;
     amount: number;

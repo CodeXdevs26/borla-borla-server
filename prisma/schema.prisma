@@ -590,7 +590,7 @@ model Booking {
 
   // Rider search lifecycle. Each search cycle lasts two hours and each matching
   // rider is notified at most once during that cycle.
-  riderSearchStatus              String    @default("active") // active, expired, accepted, cancelled
+  riderSearchStatus              String    @default("active") // active, stopped, expired, accepted, cancelled
   riderSearchCycle               Int       @default(1)
   riderSearchStartedAt           DateTime?
   riderSearchExpiresAt           DateTime?

@@ -35,6 +35,13 @@ router.delete(
   bookingControllers.deleteBooking,
 );
 
+router.post(
+  '/estimate-price',
+  auth(USER_ROLE.user, USER_ROLE.institute),
+  validateRequest(bookingValidations.estimatePriceZodSchema),
+  bookingControllers.getEstimatedBookingPrice,
+);
+
 // Get terminal booking history for the authenticated customer or rider.
 router.get(
   '/history',
@@ -54,6 +61,13 @@ router.post(
   '/:id/retry-rider-search',
   auth(USER_ROLE.user, USER_ROLE.institute),
   bookingControllers.retryRiderSearch,
+);
+
+// Stop the active two-hour rider search without cancelling the booking.
+router.patch(
+  '/:id/stop-rider-search',
+  auth(USER_ROLE.user, USER_ROLE.institute),
+  bookingControllers.stopRiderSearch,
 );
 
 // ============================================
