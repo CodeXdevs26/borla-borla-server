@@ -19,6 +19,7 @@ router.get('/my-claims', auth(...users), controllers.getMyClaims);
 router.post('/items/:itemId/claims', auth(...users), controllers.requestClaim);
 
 router.get('/admin/claims', auth(...admins), controllers.getAdminClaims);
+router.get('/admin/items', auth(...admins), controllers.getAdminCatalogue);
 router.get(
   '/admin/users/:userId/catalogue',
   auth(...admins),
