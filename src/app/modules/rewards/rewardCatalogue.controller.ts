@@ -24,6 +24,16 @@ const createItem = catchAsync(async (req: Request, res: Response) => {
   sendResponse(res, { statusCode: httpStatus.CREATED, success: true, message: 'Reward item created successfully', data });
 });
 
+const getAdminCatalogue = catchAsync(async (_req: Request, res: Response) => {
+  const data = await services.getAdminCatalogue();
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Reward catalogue retrieved successfully',
+    data,
+  });
+});
+
 const updateItem = catchAsync(async (req: Request, res: Response) => {
   const data = await services.updateItem(req.params.itemId as string, req.body);
   sendResponse(res, { statusCode: httpStatus.OK, success: true, message: 'Reward item updated successfully', data });
@@ -58,6 +68,7 @@ export const rewardCatalogueControllers = {
   getMyCatalogue,
   requestClaim,
   getMyClaims,
+  getAdminCatalogue,
   createItem,
   updateItem,
   removeItem,

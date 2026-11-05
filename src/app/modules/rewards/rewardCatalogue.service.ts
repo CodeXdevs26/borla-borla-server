@@ -82,6 +82,12 @@ const getCatalogueForUser = async (userId: string, includeInactive = false) => {
 
 const createItem = (payload: ItemInput) => prisma.rewardCatalogueItem.create({ data: payload });
 
+const getAdminCatalogue = async () =>
+  prisma.rewardCatalogueItem.findMany({
+    select: itemSelect,
+    orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+  });
+
 const updateItem = async (itemId: string, payload: Partial<ItemInput>) => {
   const item = await prisma.rewardCatalogueItem.findUnique({ where: { id: itemId } });
   if (!item) throw new AppError(httpStatus.NOT_FOUND, 'Reward item not found');
@@ -173,6 +179,7 @@ const getAdminClaims = async () => prisma.rewardClaim.findMany({
 
 export const rewardCatalogueServices = {
   getCatalogueForUser,
+  getAdminCatalogue,
   createItem,
   updateItem,
   removeItem,
